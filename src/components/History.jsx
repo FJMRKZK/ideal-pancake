@@ -2,14 +2,17 @@ import { useState, useMemo } from 'react';
 import { useWorkout } from '../context/WorkoutContext';
 import { getExerciseById } from '../data/exercises';
 import EditSetModal from './EditSetModal';
+import { sendWorkoutLogToMake, getWebhookUrl } from '../services/webhookService';
 
 function History({ onBack }) {
     const { state, updateHistorySet, deleteHistorySet, deleteSession } = useWorkout();
-    const { workoutHistory } = state;
+    const { workoutHistory, personalBests } = state;
 
     const [selectedDate, setSelectedDate] = useState(null);
     const [editingSet, setEditingSet] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+    const [isSending, setIsSending] = useState(false);
+    const [sendResult, setSendResult] = useState(null);
 
     // 日付でグループ化（同じ日の複数セッションをまとめる）
     const sessionsByDate = useMemo(() => {
@@ -32,7 +35,6 @@ function History({ onBack }) {
             });
         });
 
-        // 新しい順にソート
         return Object.values(dateMap).sort((a, b) =>
             new Date(b.date) - new Date(a.date)
         );
@@ -41,6 +43,51 @@ function History({ onBack }) {
     const handleDeleteSession = (sessionId) => {
         deleteSession(sessionId);
         setShowDeleteConfirm(null);
+    };
+
+    // Webhook送信（手動）
+    const handleSendToMake = async (sessions, sets) => {
+        const webhookUrl = getWebhookUrl();
+        if (!webhookUrl) {
+            alert('Webhook URLが設定されていません。\n設定画面から外部連携を設定してください。');
+            return;
+        }
+
+        setIsSending(true);
+        setSendResult(null);
+
+        try {
+            // 日付のセッションデータを構築
+            const sessionData = {
+                session: {
+                    id: sessions[0].id,
+                    date: sessions[0].date,
+                    sets: sets,
+                    bodyCondition: Math.round(
+                        sessions.reduce((sum, s) => sum + (s.bodyCondition || 3), 0) / sessions.length
+                    ),
+                    notes: sessions.map(s => s.notes).filter(Boolean).join('\n')
+                },
+                personalBests: personalBests,
+                settings: state.settings
+            };
+
+            const result = await sendWorkoutLogToMake(sessionData);
+
+            if (result.success) {
+                setSendResult('success');
+                setTimeout(() => setSendResult(null), 3000);
+            } else {
+                setSendResult('error');
+                alert('送信に失敗しました: ' + result.error);
+            }
+        } catch (error) {
+            console.error('Send error:', error);
+            setSendResult('error');
+            alert('送信中にエラーが発生しました');
+        } finally {
+            setIsSending(false);
+        }
     };
 
     // 日付詳細表示
@@ -53,7 +100,7 @@ function History({ onBack }) {
 
         const { sessions, sets, totalVolume } = dateData;
 
-        // 種目ごとにグループ化（全セッションのセットをまとめる）
+        // 種目ごとにグループ化
         const setsByExercise = {};
         sets.forEach(set => {
             if (!setsByExercise[set.exerciseId]) {
@@ -66,7 +113,6 @@ function History({ onBack }) {
             setsByExercise[set.exerciseId].sets.push(set);
         });
 
-        // 体感（複数セッションの平均）
         const avgCondition = Math.round(
             sessions.reduce((sum, s) => sum + (s.bodyCondition || 3), 0) / sessions.length
         );
@@ -113,6 +159,18 @@ function History({ onBack }) {
                             <div className="stat-card__label">体感</div>
                         </div>
                     </div>
+
+                    {/* Make.com送信ボタン */}
+                    <button
+                        className={`btn btn--full ${sendResult === 'success' ? 'btn--success' : 'btn--secondary'}`}
+                        onClick={() => handleSendToMake(sessions, sets)}
+                        disabled={isSending}
+                        style={{ marginBottom: 'var(--spacing-lg)' }}
+                    >
+                        {isSending ? '⏳ 送信中...' :
+                            sendResult === 'success' ? '✓ 送信完了！' :
+                                '📤 Make.comに送信'}
+                    </button>
 
                     {sessions.length > 1 && (
                         <div style={{
@@ -178,7 +236,7 @@ function History({ onBack }) {
                         </div>
                     ))}
 
-                    {/* 各セッションの削除ボタン */}
+                    {/* セッション管理 */}
                     {sessions.length > 0 && (
                         <div className="card" style={{ marginTop: 'var(--spacing-lg)' }}>
                             <div className="card__header">
@@ -250,7 +308,7 @@ function History({ onBack }) {
         );
     }
 
-    // セッション一覧（日付ごとにまとめて表示）
+    // セッション一覧
     return (
         <>
             <header className="header">
@@ -273,7 +331,6 @@ function History({ onBack }) {
                 ) : (
                     <div className="pb-list">
                         {sessionsByDate.map(({ date, sessions, sets, totalVolume }) => {
-                            const successCount = sets.filter(s => s.isSuccess).length;
                             const uniqueExercises = [...new Set(sets.map(s => s.exerciseName))];
 
                             return (

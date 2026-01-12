@@ -171,42 +171,15 @@ function WorkoutRecorder({ onEnd, onBack }) {
         }
     };
 
-    // 保存して終了（Webhook送信付き）
-    const [isSaving, setIsSaving] = useState(false);
-
-    const handleSaveSession = async () => {
+    // 保存して終了
+    const handleSaveSession = () => {
         if (currentSets.length === 0) {
             if (confirm('セットを記録せずに終了しますか？')) {
                 onBack();
             }
             return;
         }
-
-        setIsSaving(true);
-
-        try {
-            // セッションを保存
-            onEnd();
-
-            // Webhookが設定されていれば送信
-            const webhookUrl = getWebhookUrl();
-            if (webhookUrl) {
-                const result = await sendWorkoutLogToMake({
-                    session: state.currentSession,
-                    personalBests: state.personalBests,
-                    settings: state.settings
-                });
-
-                if (!result.success) {
-                    console.warn('Webhook送信に失敗:', result.error);
-                    // 失敗してもローカル保存は完了しているので続行
-                }
-            }
-        } catch (error) {
-            console.error('Save error:', error);
-        } finally {
-            setIsSaving(false);
-        }
+        onEnd();
     };
 
     return (
