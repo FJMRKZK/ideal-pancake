@@ -1110,3 +1110,33 @@ input[type="checkbox"] {
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
 }
+
+/* Floating Timer Button */
+.floating-timer-btn {
+  position: fixed;
+  right: var(--spacing-lg);
+  bottom: calc(70px + var(--spacing-lg));
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-hover));
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+  transition: all var(--transition-normal);
+  z-index: 100;
+}
+
+.floating-timer-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 30px rgba(99, 102, 241, 0.5);
+}
+
+.floating-timer-btn:active {
+  transform: scale(0.95);
+}

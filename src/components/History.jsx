@@ -7,33 +7,55 @@ function History({ onBack }) {
     const { state, updateHistorySet, deleteHistorySet, deleteSession } = useWorkout();
     const { workoutHistory } = state;
 
-    const [selectedSession, setSelectedSession] = useState(null);
+    const [selectedDate, setSelectedDate] = useState(null);
     const [editingSet, setEditingSet] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
-    // 日付でグループ化（新しい順）
+    // 日付でグループ化（同じ日の複数セッションをまとめる）
     const sessionsByDate = useMemo(() => {
-        const sorted = [...workoutHistory].reverse();
-        return sorted;
+        const dateMap = {};
+
+        workoutHistory.forEach(session => {
+            const dateKey = new Date(session.date).toISOString().split('T')[0];
+            if (!dateMap[dateKey]) {
+                dateMap[dateKey] = {
+                    date: dateKey,
+                    sessions: [],
+                    sets: [],
+                    totalVolume: 0
+                };
+            }
+            dateMap[dateKey].sessions.push(session);
+            dateMap[dateKey].sets.push(...session.sets);
+            session.sets.forEach(set => {
+                dateMap[dateKey].totalVolume += set.weight * (set.reps || 1);
+            });
+        });
+
+        // 新しい順にソート
+        return Object.values(dateMap).sort((a, b) =>
+            new Date(b.date) - new Date(a.date)
+        );
     }, [workoutHistory]);
 
     const handleDeleteSession = (sessionId) => {
         deleteSession(sessionId);
         setShowDeleteConfirm(null);
-        setSelectedSession(null);
     };
 
-    // セッション詳細表示
-    if (selectedSession) {
-        const session = workoutHistory.find(s => s.id === selectedSession);
-        if (!session) {
-            setSelectedSession(null);
+    // 日付詳細表示
+    if (selectedDate) {
+        const dateData = sessionsByDate.find(d => d.date === selectedDate);
+        if (!dateData) {
+            setSelectedDate(null);
             return null;
         }
 
-        // 種目ごとにグループ化
+        const { sessions, sets, totalVolume } = dateData;
+
+        // 種目ごとにグループ化（全セッションのセットをまとめる）
         const setsByExercise = {};
-        session.sets.forEach(set => {
+        sets.forEach(set => {
             if (!setsByExercise[set.exerciseId]) {
                 setsByExercise[set.exerciseId] = {
                     exercise: getExerciseById(set.exerciseId),
@@ -44,38 +66,32 @@ function History({ onBack }) {
             setsByExercise[set.exerciseId].sets.push(set);
         });
 
-        // 総ボリューム計算
-        const totalVolume = session.sets.reduce((sum, set) => {
-            return sum + (set.weight * (set.reps || 1));
-        }, 0);
+        // 体感（複数セッションの平均）
+        const avgCondition = Math.round(
+            sessions.reduce((sum, s) => sum + (s.bodyCondition || 3), 0) / sessions.length
+        );
 
         return (
             <>
                 <header className="header">
-                    <button className="header__back" onClick={() => setSelectedSession(null)}>
+                    <button className="header__back" onClick={() => setSelectedDate(null)}>
                         ← 戻る
                     </button>
                     <h1 className="header__title">
-                        {new Date(session.date).toLocaleDateString('ja-JP', {
+                        {new Date(selectedDate).toLocaleDateString('ja-JP', {
                             month: 'short',
                             day: 'numeric',
                             weekday: 'short'
                         })}
                     </h1>
-                    <button
-                        className="btn btn--ghost"
-                        style={{ color: 'var(--color-error)' }}
-                        onClick={() => setShowDeleteConfirm(session.id)}
-                    >
-                        🗑
-                    </button>
+                    <div></div>
                 </header>
 
                 <main className="main">
                     {/* サマリー */}
                     <div className="stats-grid" style={{ marginBottom: 'var(--spacing-xl)' }}>
                         <div className="stat-card">
-                            <div className="stat-card__value">{session.sets.length}</div>
+                            <div className="stat-card__value">{sets.length}</div>
                             <div className="stat-card__label">セット数</div>
                         </div>
                         <div className="stat-card">
@@ -86,17 +102,31 @@ function History({ onBack }) {
                         </div>
                         <div className="stat-card">
                             <div className="stat-card__value">
-                                {Math.round((session.sets.filter(s => s.isSuccess).length / session.sets.length) * 100)}%
+                                {Math.round((sets.filter(s => s.isSuccess).length / sets.length) * 100)}%
                             </div>
                             <div className="stat-card__label">成功率</div>
                         </div>
                         <div className="stat-card">
                             <div className="stat-card__value">
-                                {['😫', '😕', '😐', '🙂', '😊'][session.bodyCondition - 1] || '😐'}
+                                {['😫', '😕', '😐', '🙂', '😊'][avgCondition - 1] || '😐'}
                             </div>
                             <div className="stat-card__label">体感</div>
                         </div>
                     </div>
+
+                    {sessions.length > 1 && (
+                        <div style={{
+                            color: 'var(--color-text-muted)',
+                            fontSize: 'var(--font-size-sm)',
+                            textAlign: 'center',
+                            marginBottom: 'var(--spacing-md)',
+                            padding: 'var(--spacing-sm)',
+                            background: 'var(--color-bg-tertiary)',
+                            borderRadius: 'var(--radius-md)'
+                        }}>
+                            📝 この日は {sessions.length} 回のセッションが記録されています
+                        </div>
+                    )}
 
                     <p style={{
                         color: 'var(--color-text-muted)',
@@ -108,16 +138,16 @@ function History({ onBack }) {
                     </p>
 
                     {/* 種目別 */}
-                    {Object.values(setsByExercise).map(({ name, sets }) => (
+                    {Object.values(setsByExercise).map(({ name, sets: exerciseSets }) => (
                         <div key={name} className="card">
                             <div className="card__header">
                                 <h3 className="card__title">{name}</h3>
                                 <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-                                    {sets.filter(s => s.isSuccess).length}/{sets.length} 成功
+                                    {exerciseSets.filter(s => s.isSuccess).length}/{exerciseSets.length} 成功
                                 </span>
                             </div>
                             <ul className="set-list">
-                                {sets.map((set, index) => (
+                                {exerciseSets.map((set, index) => (
                                     <li
                                         key={set.id}
                                         className="set-item"
@@ -147,13 +177,45 @@ function History({ onBack }) {
                             </ul>
                         </div>
                     ))}
+
+                    {/* 各セッションの削除ボタン */}
+                    {sessions.length > 0 && (
+                        <div className="card" style={{ marginTop: 'var(--spacing-lg)' }}>
+                            <div className="card__header">
+                                <h3 className="card__title">セッション管理</h3>
+                            </div>
+                            {sessions.map((session, index) => (
+                                <div
+                                    key={session.id}
+                                    style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        padding: 'var(--spacing-sm) 0',
+                                        borderTop: index > 0 ? '1px solid var(--color-border)' : 'none'
+                                    }}
+                                >
+                                    <span style={{ fontSize: 'var(--font-size-sm)' }}>
+                                        セッション {index + 1} ({session.sets.length}セット)
+                                    </span>
+                                    <button
+                                        className="btn btn--ghost"
+                                        style={{ color: 'var(--color-error)', fontSize: 'var(--font-size-sm)' }}
+                                        onClick={() => setShowDeleteConfirm(session.id)}
+                                    >
+                                        削除
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </main>
 
                 {/* 編集モーダル */}
                 {editingSet && (
                     <EditSetModal
                         set={editingSet}
-                        sessionId={session.id}
+                        sessionId={sessions.find(s => s.sets.some(set => set.id === editingSet.id))?.id}
                         onSave={updateHistorySet}
                         onDelete={deleteHistorySet}
                         onClose={() => setEditingSet(null)}
@@ -167,7 +229,6 @@ function History({ onBack }) {
                             <div className="modal__icon">⚠️</div>
                             <div className="modal__title">セッションを削除しますか？</div>
                             <div className="modal__message">
-                                この日のトレーニング記録がすべて削除されます。<br />
                                 この操作は取り消せません。
                             </div>
                             <div className="modal__actions">
@@ -189,7 +250,7 @@ function History({ onBack }) {
         );
     }
 
-    // セッション一覧
+    // セッション一覧（日付ごとにまとめて表示）
     return (
         <>
             <header className="header">
@@ -211,28 +272,36 @@ function History({ onBack }) {
                     </div>
                 ) : (
                     <div className="pb-list">
-                        {sessionsByDate.map(session => {
-                            const successCount = session.sets.filter(s => s.isSuccess).length;
-                            const uniqueExercises = [...new Set(session.sets.map(s => s.exerciseName))];
-                            const totalVolume = session.sets.reduce((sum, set) =>
-                                sum + (set.weight * (set.reps || 1)), 0
-                            );
+                        {sessionsByDate.map(({ date, sessions, sets, totalVolume }) => {
+                            const successCount = sets.filter(s => s.isSuccess).length;
+                            const uniqueExercises = [...new Set(sets.map(s => s.exerciseName))];
 
                             return (
                                 <div
-                                    key={session.id}
+                                    key={date}
                                     className="pb-item"
                                     style={{ cursor: 'pointer' }}
-                                    onClick={() => setSelectedSession(session.id)}
+                                    onClick={() => setSelectedDate(date)}
                                 >
                                     <div>
-                                        <div className="pb-item__name">
-                                            {new Date(session.date).toLocaleDateString('ja-JP', {
+                                        <div className="pb-item__name" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                                            {new Date(date).toLocaleDateString('ja-JP', {
                                                 year: 'numeric',
                                                 month: 'short',
                                                 day: 'numeric',
                                                 weekday: 'short'
                                             })}
+                                            {sessions.length > 1 && (
+                                                <span style={{
+                                                    fontSize: 'var(--font-size-xs)',
+                                                    background: 'var(--color-accent-muted)',
+                                                    color: 'var(--color-accent)',
+                                                    padding: '2px 6px',
+                                                    borderRadius: 'var(--radius-full)'
+                                                }}>
+                                                    {sessions.length}回
+                                                </span>
+                                            )}
                                         </div>
                                         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
                                             {uniqueExercises.slice(0, 3).join(', ')}
@@ -241,7 +310,7 @@ function History({ onBack }) {
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600' }}>
-                                            {session.sets.length}セット
+                                            {sets.length}セット
                                         </div>
                                         <div style={{
                                             fontSize: 'var(--font-size-xs)',

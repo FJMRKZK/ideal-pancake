@@ -6,6 +6,7 @@ import Analysis from './components/Analysis';
 import History from './components/History';
 import Settings from './components/Settings';
 import PasswordScreen from './components/PasswordScreen';
+import RestTimer, { requestNotificationPermission } from './components/RestTimer';
 
 const VIEWS = {
     DASHBOARD: 'dashboard',
@@ -18,6 +19,7 @@ const VIEWS = {
 function App() {
     const [currentView, setCurrentView] = useState(VIEWS.DASHBOARD);
     const [isUnlocked, setIsUnlocked] = useState(false);
+    const [showTimer, setShowTimer] = useState(false);
     const { state, endSession } = useWorkout();
 
     // セッションストレージで認証状態を確認
@@ -25,6 +27,13 @@ function App() {
         const unlocked = sessionStorage.getItem('weightlifting-app-unlocked') === 'true';
         setIsUnlocked(unlocked);
     }, []);
+
+    // 通知許可をリクエスト
+    useEffect(() => {
+        if (isUnlocked) {
+            requestNotificationPermission();
+        }
+    }, [isUnlocked]);
 
     const handleUnlock = () => {
         setIsUnlocked(true);
@@ -68,6 +77,15 @@ function App() {
         <div className="app">
             {renderView()}
 
+            {/* フローティングタイマーボタン - すべての画面で表示 */}
+            <button
+                className="floating-timer-btn"
+                onClick={() => setShowTimer(true)}
+                title="レストタイマー"
+            >
+                ⏱
+            </button>
+
             {/* Bottom Navigation - 記録中以外に表示 */}
             {currentView !== VIEWS.RECORD && (
                 <nav className="nav">
@@ -100,6 +118,15 @@ function App() {
                         設定
                     </button>
                 </nav>
+            )}
+
+            {/* グローバルレストタイマー */}
+            {showTimer && (
+                <RestTimer
+                    duration={state.settings.restTimerDuration}
+                    onComplete={() => setShowTimer(false)}
+                    onClose={() => setShowTimer(false)}
+                />
             )}
         </div>
     );
