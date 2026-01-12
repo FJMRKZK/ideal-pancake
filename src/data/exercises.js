@@ -27,6 +27,12 @@ export const CATEGORIES = {
 export const EXERCISES = [
     // スナッチ系
     {
+        id: 'snatch',
+        name: 'スナッチ',
+        category: CATEGORIES.SNATCH,
+        contributions: { shoulder: 15, back: 20, quads: 20, hamstring: 15, glutes: 15, traps: 10, arms: 5 }
+    },
+    {
         id: 'power-snatch',
         name: 'パワースナッチ',
         category: CATEGORIES.SNATCH,
@@ -153,6 +159,18 @@ export const EXERCISES = [
         contributions: { shoulder: 40, back: 30, traps: 20, arms: 10 }
     },
     // クリーン系
+    {
+        id: 'clean',
+        name: 'クリーン',
+        category: CATEGORIES.CLEAN,
+        contributions: { quads: 25, glutes: 20, back: 20, hamstring: 15, traps: 15, arms: 5 }
+    },
+    {
+        id: 'clean-and-jerk',
+        name: 'クリーン&ジャーク',
+        category: CATEGORIES.CLEAN,
+        contributions: { quads: 25, shoulder: 20, glutes: 15, back: 15, traps: 10, hamstring: 10, arms: 5 }
+    },
     {
         id: 'power-clean',
         name: 'パワークリーン',

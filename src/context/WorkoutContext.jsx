@@ -72,6 +72,10 @@ const ACTIONS = {
     // カスタム種目
     ADD_CUSTOM_EXERCISE: 'ADD_CUSTOM_EXERCISE',
     DELETE_CUSTOM_EXERCISE: 'DELETE_CUSTOM_EXERCISE',
+    // PB削除
+    DELETE_PB: 'DELETE_PB',
+    // セッションキャンセル
+    CANCEL_SESSION: 'CANCEL_SESSION',
     // インポート
     IMPORT_DATA: 'IMPORT_DATA'
 };
@@ -199,7 +203,7 @@ function workoutReducer(state, action) {
             break;
 
         case ACTIONS.UPDATE_PB:
-            const { exerciseId, weight, date } = action.payload;
+            const { exerciseId, weight, date, reps } = action.payload;
             const existingPB = state.personalBests[exerciseId] || { history: [] };
             newState = {
                 ...state,
@@ -207,10 +211,26 @@ function workoutReducer(state, action) {
                     ...state.personalBests,
                     [exerciseId]: {
                         weight,
+                        reps: reps || 1,
                         date,
-                        history: [...existingPB.history, { weight: existingPB.weight, date: existingPB.date }].filter(h => h.weight)
+                        history: [...existingPB.history, { weight: existingPB.weight, reps: existingPB.reps, date: existingPB.date }].filter(h => h.weight)
                     }
                 }
+            };
+            break;
+
+        case ACTIONS.DELETE_PB:
+            const { [action.payload]: removed, ...remainingPBs } = state.personalBests;
+            newState = {
+                ...state,
+                personalBests: remainingPBs
+            };
+            break;
+
+        case ACTIONS.CANCEL_SESSION:
+            newState = {
+                ...state,
+                currentSession: null
             };
             break;
 
@@ -307,10 +327,11 @@ export function WorkoutProvider({ children }) {
         }),
         deleteSession: (sessionId) => dispatch({ type: ACTIONS.DELETE_SESSION, payload: sessionId }),
 
-        updatePB: (exerciseId, weight) => dispatch({
+        updatePB: (exerciseId, weight, reps = 1) => dispatch({
             type: ACTIONS.UPDATE_PB,
-            payload: { exerciseId, weight, date: new Date().toISOString() }
+            payload: { exerciseId, weight, reps, date: new Date().toISOString() }
         }),
+        deletePB: (exerciseId) => dispatch({ type: ACTIONS.DELETE_PB, payload: exerciseId }),
         updateSettings: (settings) => dispatch({ type: ACTIONS.UPDATE_SETTINGS, payload: settings }),
 
         // お気に入り・最近使用
@@ -320,6 +341,9 @@ export function WorkoutProvider({ children }) {
         // カスタム種目
         addCustomExercise: (exercise) => dispatch({ type: ACTIONS.ADD_CUSTOM_EXERCISE, payload: exercise }),
         deleteCustomExercise: (exerciseId) => dispatch({ type: ACTIONS.DELETE_CUSTOM_EXERCISE, payload: exerciseId }),
+
+        // セッション
+        cancelSession: () => dispatch({ type: ACTIONS.CANCEL_SESSION }),
 
         // インポート
         importData: (data) => dispatch({ type: ACTIONS.IMPORT_DATA, payload: data }),

@@ -12,7 +12,6 @@ function WorkoutRecorder({ onEnd, onBack }) {
         state,
         addSet,
         updatePB,
-        checkPBExceeded,
         updateSessionDate,
         toggleFavorite,
         addRecentExercise
@@ -107,7 +106,7 @@ function WorkoutRecorder({ onEnd, onBack }) {
         }
     };
 
-    // セット記録（成功/失敗）
+    // セット記録（成功/失敗） - タイマー自動起動を削除
     const recordSet = (isSuccess) => {
         if (!selectedExercise) return;
 
@@ -129,29 +128,30 @@ function WorkoutRecorder({ onEnd, onBack }) {
         addSet(setData);
         addRecentExercise(selectedExercise.id);
 
-        // PB更新チェック（1repの成功時のみ）
-        if (reps === 1 && checkPBExceeded(selectedExercise.id, weight, isSuccess)) {
-            setPbDialogData({
-                exerciseName: selectedExercise.name,
-                exerciseId: selectedExercise.id,
-                oldPB: currentPB,
-                newPB: weight
-            });
+        // PB更新チェック（成功時、PBがなければ何repでもOK、PBがあれば超えた場合）
+        if (isSuccess) {
+            const existingPB = state.personalBests[selectedExercise.id];
+            const shouldOfferPB = !existingPB || weight > existingPB.weight;
+
+            if (shouldOfferPB) {
+                setPbDialogData({
+                    exerciseName: selectedExercise.name,
+                    exerciseId: selectedExercise.id,
+                    oldPB: existingPB?.weight || 0,
+                    newPB: weight,
+                    reps: reps
+                });
+            }
         }
 
         // メモをクリア
         setNotes('');
-
-        // タイマー表示
-        if (state.settings.restTimerDuration > 0) {
-            setShowTimer(true);
-        }
     };
 
     // PB更新確定
     const confirmPBUpdate = () => {
         if (pbDialogData) {
-            updatePB(pbDialogData.exerciseId, pbDialogData.newPB);
+            updatePB(pbDialogData.exerciseId, pbDialogData.newPB, pbDialogData.reps);
             setPbDialogData(null);
         }
     };
@@ -170,8 +170,8 @@ function WorkoutRecorder({ onEnd, onBack }) {
         }
     };
 
-    // 終了確認
-    const handleEndSession = () => {
+    // 保存して終了
+    const handleSaveSession = () => {
         if (currentSets.length === 0) {
             if (confirm('セットを記録せずに終了しますか？')) {
                 onBack();
@@ -184,16 +184,18 @@ function WorkoutRecorder({ onEnd, onBack }) {
     return (
         <>
             <header className="header">
-                <button className="header__back" onClick={handleEndSession}>
+                <button className="header__back" onClick={handleSaveSession}>
                     ← 終了
                 </button>
                 <h1 className="header__title">トレーニング記録</h1>
-                <span style={{
-                    fontSize: 'var(--font-size-sm)',
-                    color: 'var(--color-accent)'
-                }}>
-                    {currentSets.length} セット
-                </span>
+                {/* タイマーボタン - 常に表示 */}
+                <button
+                    className="btn btn--ghost"
+                    style={{ fontSize: 'var(--font-size-xl)', padding: 'var(--spacing-xs)' }}
+                    onClick={() => setShowTimer(true)}
+                >
+                    ⏱
+                </button>
             </header>
 
             <main className="main">
@@ -473,6 +475,17 @@ function WorkoutRecorder({ onEnd, onBack }) {
                         </div>
                     </div>
                 )}
+
+                {/* 保存ボタン */}
+                {currentSets.length > 0 && (
+                    <button
+                        className="btn btn--primary btn--full btn--lg"
+                        onClick={handleSaveSession}
+                        style={{ marginTop: 'var(--spacing-xl)' }}
+                    >
+                        💾 トレーニングを保存 ({currentSets.length}セット)
+                    </button>
+                )}
             </main>
 
             {/* テンキーモーダル */}
@@ -493,6 +506,7 @@ function WorkoutRecorder({ onEnd, onBack }) {
                     exerciseName={pbDialogData.exerciseName}
                     oldPB={pbDialogData.oldPB}
                     newPB={pbDialogData.newPB}
+                    reps={pbDialogData.reps}
                     onConfirm={confirmPBUpdate}
                     onCancel={() => setPbDialogData(null)}
                 />

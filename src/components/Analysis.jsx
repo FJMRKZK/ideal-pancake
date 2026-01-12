@@ -114,7 +114,7 @@ function Analysis({ onBack }) {
                 label: i === 0 ? '今週' : `${i}週前`,
                 sessions: weekSessions.length,
                 sets: weekSets.length,
-                volume: Math.round(volume / 1000), // トン
+                volume: Math.round(volume), // kg
                 successRate
             });
         }
@@ -261,7 +261,7 @@ function Analysis({ onBack }) {
                                         <td style={{ padding: 'var(--spacing-sm)' }}>{week.label}</td>
                                         <td style={{ textAlign: 'center', padding: 'var(--spacing-sm)' }}>{week.sessions}</td>
                                         <td style={{ textAlign: 'center', padding: 'var(--spacing-sm)' }}>{week.sets}</td>
-                                        <td style={{ textAlign: 'center', padding: 'var(--spacing-sm)' }}>{week.volume}t</td>
+                                        <td style={{ textAlign: 'center', padding: 'var(--spacing-sm)' }}>{week.volume.toLocaleString()} kg</td>
                                         <td style={{ textAlign: 'center', padding: 'var(--spacing-sm)' }}>{week.successRate}%</td>
                                     </tr>
                                 ))}
@@ -425,7 +425,7 @@ function Analysis({ onBack }) {
                             >
                                 <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: '600' }}>{label}</div>
                                 <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                                    {bodyPartLoad[key]?.percent || 0}% ({((bodyPartLoad[key]?.raw || 0) / 1000).toFixed(1)}t)
+                                    {bodyPartLoad[key]?.percent || 0}% ({(bodyPartLoad[key]?.raw || 0).toLocaleString()} kg)
                                 </div>
                             </div>
                         ))}

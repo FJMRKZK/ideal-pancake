@@ -80,7 +80,7 @@ function History({ onBack }) {
                         </div>
                         <div className="stat-card">
                             <div className="stat-card__value">
-                                {(totalVolume / 1000).toFixed(1)}t
+                                {totalVolume.toLocaleString()} kg
                             </div>
                             <div className="stat-card__label">総ボリューム</div>
                         </div>
@@ -247,7 +247,7 @@ function History({ onBack }) {
                                             fontSize: 'var(--font-size-xs)',
                                             color: 'var(--color-text-muted)'
                                         }}>
-                                            {(totalVolume / 1000).toFixed(1)}t
+                                            {totalVolume.toLocaleString()} kg
                                         </div>
                                     </div>
                                 </div>
