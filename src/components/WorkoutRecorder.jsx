@@ -25,9 +25,19 @@ function WorkoutRecorder({ onEnd, onBack }) {
     const [rpe, setRpe] = useState(7);
     const [bodyCondition, setBodyCondition] = useState(3);
     const [notes, setNotes] = useState('');
-    const [sessionDate, setSessionDate] = useState(
-        new Date(state.currentSession?.date || new Date()).toISOString().split('T')[0]
-    );
+
+    // セッション日付を安全に初期化
+    const getInitialDate = () => {
+        try {
+            if (state.currentSession?.date) {
+                return new Date(state.currentSession.date).toISOString().split('T')[0];
+            }
+        } catch (e) {
+            console.warn('Date initialization error:', e);
+        }
+        return new Date().toISOString().split('T')[0];
+    };
+    const [sessionDate, setSessionDate] = useState(getInitialDate);
 
     // UI状態
     const [searchQuery, setSearchQuery] = useState('');
@@ -110,6 +120,10 @@ function WorkoutRecorder({ onEnd, onBack }) {
     // セット記録（成功/失敗） - タイマー自動起動を削除
     const recordSet = (isSuccess) => {
         if (!selectedExercise) return;
+        if (!state.currentSession) {
+            console.error('No active session');
+            return;
+        }
 
         // バイブレーション
         if ('vibrate' in navigator && state.settings.enableVibration) {
@@ -126,23 +140,27 @@ function WorkoutRecorder({ onEnd, onBack }) {
             notes: notes.trim()
         };
 
-        addSet(setData);
-        addRecentExercise(selectedExercise.id);
+        try {
+            addSet(setData);
+            addRecentExercise(selectedExercise.id);
 
-        // PB更新チェック（成功時、PBがなければ何repでもOK、PBがあれば超えた場合）
-        if (isSuccess) {
-            const existingPB = state.personalBests[selectedExercise.id];
-            const shouldOfferPB = !existingPB || weight > existingPB.weight;
+            // PB更新チェック（成功時、PBがなければ何repでもOK、PBがあれば超えた場合）
+            if (isSuccess) {
+                const existingPB = state.personalBests[selectedExercise.id];
+                const shouldOfferPB = !existingPB || weight > existingPB.weight;
 
-            if (shouldOfferPB) {
-                setPbDialogData({
-                    exerciseName: selectedExercise.name,
-                    exerciseId: selectedExercise.id,
-                    oldPB: existingPB?.weight || 0,
-                    newPB: weight,
-                    reps: reps
-                });
+                if (shouldOfferPB) {
+                    setPbDialogData({
+                        exerciseName: selectedExercise.name,
+                        exerciseId: selectedExercise.id,
+                        oldPB: existingPB?.weight || 0,
+                        newPB: weight,
+                        reps: reps
+                    });
+                }
             }
+        } catch (error) {
+            console.error('Error recording set:', error);
         }
 
         // メモをクリア
