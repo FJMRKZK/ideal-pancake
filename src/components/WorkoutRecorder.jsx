@@ -6,7 +6,6 @@ import NumpadModal from './NumpadModal';
 import PBDialog from './PBDialog';
 import SetList from './SetList';
 import RestTimer, { requestNotificationPermission } from './RestTimer';
-import { sendWorkoutLogToMake, getWebhookUrl } from '../services/webhookService';
 
 function WorkoutRecorder({ onEnd, onBack }) {
     const {
@@ -500,10 +499,9 @@ function WorkoutRecorder({ onEnd, onBack }) {
                     <button
                         className="btn btn--primary btn--full btn--lg"
                         onClick={handleSaveSession}
-                        disabled={isSaving}
                         style={{ marginTop: 'var(--spacing-xl)' }}
                     >
-                        {isSaving ? '⏳ 保存中...' : `💾 トレーニングを保存 (${currentSets.length}セット)`}
+                        💾 トレーニングを保存 ({currentSets.length}セット)
                     </button>
                 )}
             </main>
