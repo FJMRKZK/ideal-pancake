@@ -1,8 +1,8 @@
 // Make.com Webhook サービス
-// トレーニングログを外部システムに送信する
+// トレーニングログを整形済みテキストとして外部システムに送信する
 
 /**
- * Make.com Webhook にワークアウトログを送信
+ * Make.com Webhook にワークアウトログを送信（text/plain形式）
  * @param {Object} sessionData - セッションデータ
  * @param {Object} options - オプション
  * @returns {Promise<{success: boolean, error?: string}>}
@@ -19,16 +19,21 @@ export async function sendWorkoutLogToMake(sessionData, options = {}) {
         return { success: false, error: 'Webhook URLが設定されていません' };
     }
 
-    // 送信データを構築
-    const payload = buildPayload(sessionData);
+    // 整形済みテキストを構築
+    const formattedText = formatWorkoutData(sessionData);
+
+    // 検証用ログ出力
+    console.log('=== Webhook送信データ (text/plain) ===');
+    console.log(formattedText);
+    console.log('=====================================');
 
     try {
         const response = await fetch(webhookUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain; charset=utf-8',
             },
-            body: JSON.stringify(payload),
+            body: formattedText,
         });
 
         if (!response.ok) {
@@ -48,14 +53,39 @@ export async function sendWorkoutLogToMake(sessionData, options = {}) {
 }
 
 /**
- * 送信用ペイロードを構築
+ * ワークアウトデータを「キー: 値」形式のテキストに整形
  * @param {Object} sessionData - セッションデータ
- * @returns {Object} - 送信用データ
+ * @returns {string} - 整形済みテキスト
  */
-function buildPayload(sessionData) {
-    const { session, personalBests, settings } = sessionData;
+function formatWorkoutData(sessionData) {
+    const { session, personalBests } = sessionData;
+    const lines = [];
 
-    // 種目別にセットをグループ化
+    // === 基本情報 ===
+    lines.push('=== トレーニング記録 ===');
+    lines.push(`トレーニング日: ${formatDate(session.date)}`);
+    lines.push(`体感: ${getConditionLabel(session.bodyCondition)}`);
+    lines.push(`総セット数: ${session.sets.length}`);
+
+    // 総ボリューム計算
+    const totalVolume = session.sets.reduce((sum, set) =>
+        sum + (set.weight * (set.reps || 1)), 0
+    );
+    lines.push(`総ボリューム: ${totalVolume.toLocaleString()} kg`);
+
+    // 成功率計算
+    const successCount = session.sets.filter(s => s.isSuccess).length;
+    const successRate = session.sets.length > 0
+        ? Math.round((successCount / session.sets.length) * 100)
+        : 0;
+    lines.push(`成功率: ${successRate}% (${successCount}/${session.sets.length})`);
+
+    lines.push('');
+
+    // === 種目別詳細 ===
+    lines.push('=== 種目別詳細 ===');
+
+    // 種目ごとにグループ化
     const exerciseGroups = {};
     session.sets.forEach(set => {
         if (!exerciseGroups[set.exerciseId]) {
@@ -65,78 +95,103 @@ function buildPayload(sessionData) {
                 sets: []
             };
         }
-        exerciseGroups[set.exerciseId].sets.push({
-            weight: set.weight,
-            reps: set.reps || 1,
-            rpe: set.rpe,
-            isSuccess: set.isSuccess,
-            notes: set.notes || ''
-        });
+        exerciseGroups[set.exerciseId].sets.push(set);
     });
 
-    // 総ボリューム計算
-    const totalVolume = session.sets.reduce((sum, set) =>
-        sum + (set.weight * (set.reps || 1)), 0
-    );
+    // 各種目をループ
+    Object.values(exerciseGroups).forEach(group => {
+        const currentPB = personalBests[group.exerciseId];
+        const successfulSets = group.sets.filter(s => s.isSuccess);
+        const maxSuccessWeight = successfulSets.length > 0
+            ? Math.max(...successfulSets.map(s => s.weight))
+            : 0;
 
-    // 成功率計算
-    const successRate = session.sets.length > 0
-        ? Math.round((session.sets.filter(s => s.isSuccess).length / session.sets.length) * 100)
-        : 0;
+        // PB更新判定
+        const isPBUpdate = currentPB && maxSuccessWeight >= currentPB.weight;
+        const pbLabel = isPBUpdate ? ' [PB!]' : '';
 
-    return {
-        // メタ情報
-        meta: {
-            timestamp: new Date().toISOString(),
-            sessionId: session.id,
-            sessionDate: session.date,
-            appVersion: '1.2.0'
-        },
+        lines.push('');
+        lines.push(`【${group.exerciseName}】${pbLabel}`);
 
-        // サマリー
-        summary: {
-            totalSets: session.sets.length,
-            totalVolume: totalVolume,
-            volumeKg: totalVolume,
-            successRate: successRate,
-            bodyCondition: session.bodyCondition,
-            exerciseCount: Object.keys(exerciseGroups).length
-        },
+        // 各セットを出力
+        group.sets.forEach((set, index) => {
+            const result = set.isSuccess ? '○' : '×';
+            const repsText = (set.reps && set.reps > 1) ? `×${set.reps}` : '';
+            const noteText = set.notes ? ` (${set.notes})` : '';
+            lines.push(`  セット${index + 1}: ${set.weight}kg${repsText} RPE${set.rpe} ${result}${noteText}`);
+        });
 
-        // 種目別詳細
-        exercises: Object.values(exerciseGroups).map(group => ({
-            name: group.exerciseName,
-            id: group.exerciseId,
-            sets: group.sets,
-            totalSets: group.sets.length,
-            maxWeight: Math.max(...group.sets.map(s => s.weight)),
-            minWeight: Math.min(...group.sets.map(s => s.weight)),
-            avgRpe: group.sets.reduce((sum, s) => sum + s.rpe, 0) / group.sets.length,
-            pb: personalBests[group.exerciseId]?.weight || null
-        })),
+        // PB情報
+        if (currentPB) {
+            const pbRepsText = currentPB.reps > 1 ? `×${currentPB.reps}` : '';
+            lines.push(`  現在のPB: ${currentPB.weight}kg${pbRepsText}`);
+        }
+    });
 
-        // 全セット（生データ）
-        rawSets: session.sets.map(set => ({
-            exerciseName: set.exerciseName,
-            weight: set.weight,
-            reps: set.reps || 1,
-            rpe: set.rpe,
-            isSuccess: set.isSuccess,
-            notes: set.notes || '',
-            timestamp: set.timestamp
-        })),
+    lines.push('');
 
-        // PB情報（更新があれば）
-        personalBests: Object.entries(personalBests).map(([id, pb]) => ({
-            exerciseId: id,
-            weight: pb.weight,
-            reps: pb.reps || 1,
-            date: pb.date
-        })),
+    // === PB更新情報 ===
+    const pbUpdates = Object.values(exerciseGroups).filter(group => {
+        const currentPB = personalBests[group.exerciseId];
+        const successfulSets = group.sets.filter(s => s.isSuccess);
+        const maxSuccessWeight = successfulSets.length > 0
+            ? Math.max(...successfulSets.map(s => s.weight))
+            : 0;
+        return currentPB && maxSuccessWeight >= currentPB.weight;
+    });
 
-        // ノート（セッション全体）
-        notes: session.notes || ''
+    if (pbUpdates.length > 0) {
+        lines.push('=== PB更新 ===');
+        pbUpdates.forEach(group => {
+            const pb = personalBests[group.exerciseId];
+            const repsText = pb.reps > 1 ? `×${pb.reps}` : '';
+            lines.push(`${group.exerciseName}: ${pb.weight}kg${repsText} [PB!]`);
+        });
+        lines.push('');
+    }
+
+    // === 備考 ===
+    if (session.notes) {
+        lines.push('=== 備考 ===');
+        lines.push(session.notes);
+        lines.push('');
+    }
+
+    // タイムスタンプ
+    lines.push(`送信日時: ${new Date().toLocaleString('ja-JP')}`);
+
+    return lines.join('\n');
+}
+
+/**
+ * 日付をフォーマット
+ * @param {string} dateString - ISO日付文字列
+ * @returns {string}
+ */
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ja-JP', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long'
+    });
+}
+
+/**
+ * 体感ラベルを取得
+ * @param {number} condition - 体感値 (1-5)
+ * @returns {string}
+ */
+function getConditionLabel(condition) {
+    const labels = {
+        1: '😫 最悪',
+        2: '😕 悪い',
+        3: '😐 普通',
+        4: '🙂 良い',
+        5: '😊 最高'
     };
+    return labels[condition] || '😐 普通';
 }
 
 /**

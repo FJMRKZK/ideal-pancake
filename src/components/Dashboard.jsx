@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useWorkout } from '../context/WorkoutContext';
 import { EXERCISES, getExerciseById } from '../data/exercises';
 
 function Dashboard({ onStartWorkout }) {
-    const { state, startSession, cancelSession, deletePB } = useWorkout();
+    const { state, startSession, cancelSession, deletePB, updatePB } = useWorkout();
     const { personalBests, workoutHistory, currentSession, customExercises } = state;
 
     const [showPBManage, setShowPBManage] = useState(false);
     const [pbToDelete, setPbToDelete] = useState(null);
+    const [showAddPB, setShowAddPB] = useState(false);
+    const [newPBExercise, setNewPBExercise] = useState('');
+    const [newPBWeight, setNewPBWeight] = useState(60);
+    const [newPBReps, setNewPBReps] = useState(1);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const allExercises = [...EXERCISES, ...customExercises];
 
@@ -39,6 +44,16 @@ function Dashboard({ onStartWorkout }) {
         })
         .reduce((total, session) => total + session.sets.length, 0);
 
+    // 検索結果
+    const filteredExercises = useMemo(() => {
+        if (!searchQuery) return allExercises.slice(0, 20);
+        const lowerQuery = searchQuery.toLowerCase();
+        return allExercises.filter(ex =>
+            ex.name.toLowerCase().includes(lowerQuery) ||
+            ex.id.toLowerCase().includes(lowerQuery)
+        ).slice(0, 20);
+    }, [allExercises, searchQuery]);
+
     const handleStart = () => {
         startSession();
         onStartWorkout();
@@ -54,6 +69,21 @@ function Dashboard({ onStartWorkout }) {
         deletePB(exerciseId);
         setPbToDelete(null);
     };
+
+    const handleAddPB = () => {
+        if (!newPBExercise || newPBWeight <= 0) {
+            alert('種目と重量を入力してください');
+            return;
+        }
+        updatePB(newPBExercise, newPBWeight, newPBReps);
+        setShowAddPB(false);
+        setNewPBExercise('');
+        setNewPBWeight(60);
+        setNewPBReps(1);
+        setSearchQuery('');
+    };
+
+    const selectedExercise = allExercises.find(e => e.id === newPBExercise);
 
     // ホーム画面コンテンツ
     const renderHomeContent = () => (
@@ -83,13 +113,22 @@ function Dashboard({ onStartWorkout }) {
             <div className="card">
                 <div className="card__header">
                     <h2 className="card__title">自己ベスト（PB）</h2>
-                    <button
-                        className="btn btn--ghost"
-                        style={{ fontSize: 'var(--font-size-sm)' }}
-                        onClick={() => setShowPBManage(!showPBManage)}
-                    >
-                        {showPBManage ? '完了' : '管理'}
-                    </button>
+                    <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                        <button
+                            className="btn btn--ghost"
+                            style={{ fontSize: 'var(--font-size-sm)' }}
+                            onClick={() => setShowAddPB(true)}
+                        >
+                            + 追加
+                        </button>
+                        <button
+                            className="btn btn--ghost"
+                            style={{ fontSize: 'var(--font-size-sm)' }}
+                            onClick={() => setShowPBManage(!showPBManage)}
+                        >
+                            {showPBManage ? '完了' : '管理'}
+                        </button>
+                    </div>
                 </div>
 
                 {pbEntries.length === 0 ? (
@@ -97,7 +136,7 @@ function Dashboard({ onStartWorkout }) {
                         <div className="empty-state__icon">🎯</div>
                         <div className="empty-state__text">
                             まだPBが登録されていません<br />
-                            トレーニングを記録するとPBが自動で保存されます
+                            「+ 追加」からPBを登録できます
                         </div>
                     </div>
                 ) : (
@@ -203,9 +242,139 @@ function Dashboard({ onStartWorkout }) {
                     </div>
                 )}
 
-                {/* ホーム画面コンテンツは常に表示 */}
                 {renderHomeContent()}
             </main>
+
+            {/* PB追加モーダル */}
+            {showAddPB && (
+                <div className="modal-overlay" onClick={() => setShowAddPB(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                        <div className="modal__title">PBを追加</div>
+
+                        <div className="input-group" style={{ marginTop: 'var(--spacing-lg)' }}>
+                            <label className="input-group__label">種目</label>
+                            {selectedExercise ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                                    <span style={{ flex: 1, padding: 'var(--spacing-sm)', background: 'var(--color-bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                                        {selectedExercise.name}
+                                    </span>
+                                    <button
+                                        className="btn btn--ghost"
+                                        onClick={() => { setNewPBExercise(''); setSearchQuery(''); }}
+                                    >
+                                        変更
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    <input
+                                        type="text"
+                                        className="input"
+                                        placeholder="種目を検索..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                    />
+                                    {searchQuery && (
+                                        <ul style={{
+                                            maxHeight: '200px',
+                                            overflowY: 'auto',
+                                            background: 'var(--color-bg-secondary)',
+                                            borderRadius: 'var(--radius-md)',
+                                            marginTop: 'var(--spacing-xs)'
+                                        }}>
+                                            {filteredExercises.map(ex => (
+                                                <li
+                                                    key={ex.id}
+                                                    style={{
+                                                        padding: 'var(--spacing-sm)',
+                                                        cursor: 'pointer',
+                                                        borderBottom: '1px solid var(--color-border)'
+                                                    }}
+                                                    onClick={() => {
+                                                        setNewPBExercise(ex.id);
+                                                        setSearchQuery('');
+                                                    }}
+                                                >
+                                                    {ex.name}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <div className="input-group">
+                            <label className="input-group__label">重量 (kg)</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setNewPBWeight(Math.max(0, newPBWeight - 2.5))}
+                                >
+                                    -
+                                </button>
+                                <input
+                                    type="number"
+                                    className="input"
+                                    style={{ textAlign: 'center', width: '100px' }}
+                                    value={newPBWeight}
+                                    onChange={(e) => setNewPBWeight(parseFloat(e.target.value) || 0)}
+                                />
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setNewPBWeight(newPBWeight + 2.5)}
+                                >
+                                    +
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="input-group">
+                            <label className="input-group__label">レップ数</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setNewPBReps(Math.max(1, newPBReps - 1))}
+                                >
+                                    -
+                                </button>
+                                <span style={{ minWidth: '40px', textAlign: 'center', fontSize: 'var(--font-size-xl)' }}>
+                                    {newPBReps}
+                                </span>
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setNewPBReps(newPBReps + 1)}
+                                >
+                                    +
+                                </button>
+                                {[1, 2, 3, 5].map(r => (
+                                    <button
+                                        key={r}
+                                        className={`btn ${newPBReps === r ? 'btn--primary' : 'btn--secondary'}`}
+                                        style={{ padding: 'var(--spacing-xs) var(--spacing-sm)', minWidth: '36px' }}
+                                        onClick={() => setNewPBReps(r)}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="modal__actions" style={{ marginTop: 'var(--spacing-lg)' }}>
+                            <button className="btn btn--secondary" onClick={() => setShowAddPB(false)}>
+                                キャンセル
+                            </button>
+                            <button
+                                className="btn btn--primary"
+                                onClick={handleAddPB}
+                                disabled={!newPBExercise}
+                            >
+                                追加
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* PB削除確認モーダル */}
             {pbToDelete && (
