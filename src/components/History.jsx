@@ -4,7 +4,7 @@ import { getExerciseById } from '../data/exercises';
 import EditSetModal from './EditSetModal';
 
 function History({ onBack }) {
-    const { state, updateHistorySet, deleteHistorySet, deleteSession } = useWorkout();
+    const { state, updateHistorySet, deleteHistorySet, deleteSession, reorderHistorySet } = useWorkout();
     const { workoutHistory, personalBests } = state;
 
     const [selectedDate, setSelectedDate] = useState(null);
@@ -12,6 +12,7 @@ function History({ onBack }) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generateResult, setGenerateResult] = useState(null);
+    const [isReorderMode, setIsReorderMode] = useState(false);
 
     // 日付でグループ化（同じ日の複数セッションをまとめる）
     const sessionsByDate = useMemo(() => {
@@ -301,13 +302,27 @@ function History({ onBack }) {
                         </div>
                     )}
 
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        marginBottom: 'var(--spacing-md)'
+                    }}>
+                        <button
+                            className={`btn ${isReorderMode ? 'btn--primary' : 'btn--secondary'}`}
+                            onClick={() => setIsReorderMode(!isReorderMode)}
+                            style={{ fontSize: 'var(--font-size-sm)' }}
+                        >
+                            {isReorderMode ? '✓ 並び替え完了' : '↕ セットを並び替え'}
+                        </button>
+                    </div>
+
                     <p style={{
                         color: 'var(--color-text-muted)',
                         fontSize: 'var(--font-size-sm)',
                         textAlign: 'center',
                         marginBottom: 'var(--spacing-md)'
                     }}>
-                        タップして編集
+                        {isReorderMode ? '上下ボタンで並び替え' : 'タップして編集'}
                     </p>
 
                     {/* 種目別 */}
@@ -324,11 +339,43 @@ function History({ onBack }) {
                                     <li
                                         key={set.id}
                                         className="set-item"
-                                        style={{ cursor: 'pointer' }}
-                                        onClick={() => setEditingSet(set)}
+                                        style={{ cursor: isReorderMode ? 'default' : 'pointer' }}
+                                        onClick={() => !isReorderMode && setEditingSet(set)}
                                     >
-                                        <div className="set-item__number">{index + 1}</div>
-                                        <div className="set-item__info">
+                                        {/* 並び替えモード時の上下ボタン */}
+                                        {isReorderMode && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginRight: 'var(--spacing-xs)' }}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn--secondary"
+                                                    style={{ padding: '6px 10px', fontSize: '14px', lineHeight: 1, cursor: 'pointer' }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        e.preventDefault();
+                                                        const session = sessions.find(s => s.sets.some(st => st.id === set.id));
+                                                        if (session) reorderHistorySet(session.id, set.id, 'up');
+                                                    }}
+                                                >
+                                                    ▲
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn--secondary"
+                                                    style={{ padding: '6px 10px', fontSize: '14px', lineHeight: 1, cursor: 'pointer' }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        e.preventDefault();
+                                                        const session = sessions.find(s => s.sets.some(st => st.id === set.id));
+                                                        if (session) reorderHistorySet(session.id, set.id, 'down');
+                                                    }}
+                                                >
+                                                    ▼
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {!isReorderMode && <div className="set-item__number">{index + 1}</div>}
+                                        <div className="set-item__info" style={{ flex: 1 }}>
                                             <div className="set-item__weight">
                                                 {set.weight} kg
                                                 {set.reps && set.reps > 1 && (

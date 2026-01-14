@@ -77,7 +77,9 @@ const ACTIONS = {
     // セッションキャンセル
     CANCEL_SESSION: 'CANCEL_SESSION',
     // インポート
-    IMPORT_DATA: 'IMPORT_DATA'
+    IMPORT_DATA: 'IMPORT_DATA',
+    // セット並び替え
+    REORDER_HISTORY_SET: 'REORDER_HISTORY_SET'
 };
 
 // リデューサー
@@ -114,11 +116,45 @@ function workoutReducer(state, action) {
 
         case ACTIONS.END_SESSION:
             if (!state.currentSession) return state;
-            newState = {
-                ...state,
-                workoutHistory: [...state.workoutHistory, state.currentSession],
-                currentSession: null
-            };
+
+            // 同じ日付のセッションがあるかチェック
+            const currentDateKey = new Date(state.currentSession.date).toISOString().split('T')[0];
+            const existingSessionIndex = state.workoutHistory.findIndex(session => {
+                const sessionDateKey = new Date(session.date).toISOString().split('T')[0];
+                return sessionDateKey === currentDateKey;
+            });
+
+            if (existingSessionIndex >= 0) {
+                // 同じ日付のセッションが存在 → マージ
+                const existingSession = state.workoutHistory[existingSessionIndex];
+                const mergedSession = {
+                    ...existingSession,
+                    // セットを結合
+                    sets: [...existingSession.sets, ...state.currentSession.sets],
+                    // 体調は平均
+                    bodyCondition: Math.round(
+                        ((existingSession.bodyCondition || 3) + (state.currentSession.bodyCondition || 3)) / 2
+                    ),
+                    // メモは結合
+                    notes: [existingSession.notes, state.currentSession.notes].filter(Boolean).join('\n')
+                };
+
+                const updatedHistory = [...state.workoutHistory];
+                updatedHistory[existingSessionIndex] = mergedSession;
+
+                newState = {
+                    ...state,
+                    workoutHistory: updatedHistory,
+                    currentSession: null
+                };
+            } else {
+                // 新規セッションとして追加
+                newState = {
+                    ...state,
+                    workoutHistory: [...state.workoutHistory, state.currentSession],
+                    currentSession: null
+                };
+            }
             break;
 
         case ACTIONS.ADD_SET:
@@ -234,6 +270,34 @@ function workoutReducer(state, action) {
             };
             break;
 
+        // セット並び替え
+        case ACTIONS.REORDER_HISTORY_SET:
+            newState = {
+                ...state,
+                workoutHistory: state.workoutHistory.map(session => {
+                    if (session.id === action.payload.sessionId) {
+                        const sets = [...session.sets];
+                        const { setId, direction } = action.payload;
+                        const currentIndex = sets.findIndex(s => s.id === setId);
+
+                        if (currentIndex === -1) return session;
+
+                        const newIndex = direction === 'up'
+                            ? Math.max(0, currentIndex - 1)
+                            : Math.min(sets.length - 1, currentIndex + 1);
+
+                        if (currentIndex !== newIndex) {
+                            const [movedSet] = sets.splice(currentIndex, 1);
+                            sets.splice(newIndex, 0, movedSet);
+                        }
+
+                        return { ...session, sets };
+                    }
+                    return session;
+                })
+            };
+            break;
+
         case ACTIONS.UPDATE_SETTINGS:
             newState = {
                 ...state,
@@ -344,6 +408,12 @@ export function WorkoutProvider({ children }) {
 
         // セッション
         cancelSession: () => dispatch({ type: ACTIONS.CANCEL_SESSION }),
+
+        // セット並び替え
+        reorderHistorySet: (sessionId, setId, direction) => dispatch({
+            type: ACTIONS.REORDER_HISTORY_SET,
+            payload: { sessionId, setId, direction }
+        }),
 
         // インポート
         importData: (data) => dispatch({ type: ACTIONS.IMPORT_DATA, payload: data }),

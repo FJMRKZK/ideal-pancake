@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useWorkout } from '../context/WorkoutContext';
 import { CATEGORIES } from '../data/exercises';
-import { saveWebhookUrl, getWebhookUrl, isValidWebhookUrl } from '../services/webhookService';
 
 function Settings({ onBack }) {
     const { state, updateSettings, addCustomExercise, deleteCustomExercise, importData, exportData } = useWorkout();
@@ -19,24 +18,6 @@ function Settings({ onBack }) {
     });
     const [importError, setImportError] = useState(null);
     const fileInputRef = useRef(null);
-
-    // Webhook設定
-    const [webhookUrl, setWebhookUrl] = useState('');
-    const [webhookSaved, setWebhookSaved] = useState(false);
-
-    useEffect(() => {
-        setWebhookUrl(getWebhookUrl() || '');
-    }, []);
-
-    const handleSaveWebhookUrl = () => {
-        if (webhookUrl && !isValidWebhookUrl(webhookUrl)) {
-            alert('有効なURLを入力してください');
-            return;
-        }
-        saveWebhookUrl(webhookUrl);
-        setWebhookSaved(true);
-        setTimeout(() => setWebhookSaved(false), 2000);
-    };
 
     // パスワード変更
     const handlePasswordChange = () => {
@@ -175,38 +156,6 @@ function Settings({ onBack }) {
                     >
                         パスワードを変更
                     </button>
-                </div>
-
-                {/* Webhook連携 (Make.com) */}
-                <div className="card">
-                    <div className="card__header">
-                        <h2 className="card__title">🔗 外部連携</h2>
-                    </div>
-                    <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-md)' }}>
-                        Make.comなどのWebhook URLを設定すると、トレーニング保存時に自動でデータを送信します。
-                    </p>
-                    <div className="input-group">
-                        <label className="input-group__label">Webhook URL</label>
-                        <input
-                            type="url"
-                            className="input"
-                            placeholder="https://hook.make.com/..."
-                            value={webhookUrl}
-                            onChange={(e) => setWebhookUrl(e.target.value)}
-                        />
-                    </div>
-                    <button
-                        className="btn btn--secondary btn--full"
-                        onClick={handleSaveWebhookUrl}
-                        style={{ marginTop: 'var(--spacing-sm)' }}
-                    >
-                        {webhookSaved ? '✓ 保存しました' : '保存'}
-                    </button>
-                    {webhookUrl && (
-                        <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-success)', marginTop: 'var(--spacing-sm)' }}>
-                            ✓ Webhook連携が有効です
-                        </p>
-                    )}
                 </div>
 
                 {/* タイマー設定 */}

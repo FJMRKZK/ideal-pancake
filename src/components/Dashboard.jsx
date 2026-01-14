@@ -14,6 +14,11 @@ function Dashboard({ onStartWorkout }) {
     const [newPBReps, setNewPBReps] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
 
+    // PB編集用
+    const [editingPB, setEditingPB] = useState(null);
+    const [editPBWeight, setEditPBWeight] = useState(0);
+    const [editPBReps, setEditPBReps] = useState(1);
+
     const allExercises = [...EXERCISES, ...customExercises];
 
     // PBが登録されている種目
@@ -83,6 +88,21 @@ function Dashboard({ onStartWorkout }) {
         setSearchQuery('');
     };
 
+    // PB編集開始
+    const handleEditPB = (pb) => {
+        setEditingPB(pb);
+        setEditPBWeight(pb.weight);
+        setEditPBReps(pb.reps || 1);
+    };
+
+    // PB編集保存
+    const handleSaveEditPB = () => {
+        if (editingPB && editPBWeight > 0) {
+            updatePB(editingPB.exerciseId, editPBWeight, editPBReps);
+            setEditingPB(null);
+        }
+    };
+
     const selectedExercise = allExercises.find(e => e.id === newPBExercise);
 
     // ホーム画面コンテンツ
@@ -142,7 +162,12 @@ function Dashboard({ onStartWorkout }) {
                 ) : (
                     <div className="pb-list">
                         {pbEntries.slice(0, showPBManage ? undefined : 10).map(({ exerciseId, exercise, weight, reps, date }) => (
-                            <div key={exerciseId} className="pb-item">
+                            <div
+                                key={exerciseId}
+                                className="pb-item"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => handleEditPB({ exerciseId, exercise, weight, reps, date })}
+                            >
                                 <div>
                                     <div className="pb-item__name">{exercise.name}</div>
                                     <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
@@ -162,7 +187,10 @@ function Dashboard({ onStartWorkout }) {
                                         <button
                                             className="btn btn--ghost"
                                             style={{ color: 'var(--color-error)', padding: 'var(--spacing-xs)' }}
-                                            onClick={() => setPbToDelete({ exerciseId, name: exercise.name, weight })}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPbToDelete({ exerciseId, name: exercise.name, weight });
+                                            }}
                                         >
                                             🗑
                                         </button>
@@ -396,6 +424,108 @@ function Dashboard({ onStartWorkout }) {
                                 onClick={() => handleDeletePB(pbToDelete.exerciseId)}
                             >
                                 削除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* PB編集モーダル */}
+            {editingPB && (
+                <div className="modal-overlay" onClick={() => setEditingPB(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%' }}>
+                        <div className="modal__title">PBを編集</div>
+                        <div style={{ color: 'var(--color-text-secondary)', textAlign: 'center', marginBottom: 'var(--spacing-md)' }}>
+                            {editingPB.exercise?.name}
+                        </div>
+
+                        {/* 重量（スワイプ式） */}
+                        <div className="input-group">
+                            <label className="input-group__label">重量 (kg)</label>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-xs)' }}>
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setEditPBWeight(Math.max(0, editPBWeight - 5))}
+                                    style={{ minWidth: '44px', minHeight: '44px' }}
+                                >
+                                    -5
+                                </button>
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setEditPBWeight(Math.max(0, editPBWeight - 2.5))}
+                                    style={{ minWidth: '44px', minHeight: '44px' }}
+                                >
+                                    -2.5
+                                </button>
+                                <input
+                                    type="number"
+                                    className="input"
+                                    value={editPBWeight}
+                                    onChange={(e) => setEditPBWeight(parseFloat(e.target.value) || 0)}
+                                    style={{ width: '80px', textAlign: 'center', fontSize: 'var(--font-size-xl)', fontWeight: '600' }}
+                                />
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setEditPBWeight(editPBWeight + 2.5)}
+                                    style={{ minWidth: '44px', minHeight: '44px' }}
+                                >
+                                    +2.5
+                                </button>
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setEditPBWeight(editPBWeight + 5)}
+                                    style={{ minWidth: '44px', minHeight: '44px' }}
+                                >
+                                    +5
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* レップ数 */}
+                        <div className="input-group">
+                            <label className="input-group__label">レップ数</label>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-sm)' }}>
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setEditPBReps(Math.max(1, editPBReps - 1))}
+                                    style={{ minWidth: '44px', minHeight: '44px' }}
+                                >
+                                    -
+                                </button>
+                                <span style={{ fontSize: 'var(--font-size-xl)', fontWeight: '600', minWidth: '40px', textAlign: 'center' }}>
+                                    {editPBReps}
+                                </span>
+                                <button
+                                    className="weight-input__btn"
+                                    onClick={() => setEditPBReps(editPBReps + 1)}
+                                    style={{ minWidth: '44px', minHeight: '44px' }}
+                                >
+                                    +
+                                </button>
+                                {[1, 2, 3, 5].map(r => (
+                                    <button
+                                        key={r}
+                                        className={`btn ${editPBReps === r ? 'btn--primary' : 'btn--ghost'}`}
+                                        style={{ padding: '8px 12px', minWidth: '36px', fontSize: 'var(--font-size-sm)' }}
+                                        onClick={() => setEditPBReps(r)}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1fr',
+                            gap: 'var(--spacing-sm)',
+                            marginTop: 'var(--spacing-lg)'
+                        }}>
+                            <button className="btn btn--secondary" onClick={() => setEditingPB(null)}>
+                                キャンセル
+                            </button>
+                            <button className="btn btn--primary" onClick={handleSaveEditPB}>
+                                保存
                             </button>
                         </div>
                     </div>
