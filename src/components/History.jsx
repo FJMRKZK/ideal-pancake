@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { useWorkout } from '../context/WorkoutContext';
 import { getExerciseById } from '../data/exercises';
 import EditSetModal from './EditSetModal';
-import { sendWorkoutLogToMake, getWebhookUrl } from '../services/webhookService';
 
 function History({ onBack }) {
     const { state, updateHistorySet, deleteHistorySet, deleteSession } = useWorkout();
@@ -11,8 +10,8 @@ function History({ onBack }) {
     const [selectedDate, setSelectedDate] = useState(null);
     const [editingSet, setEditingSet] = useState(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
-    const [isSending, setIsSending] = useState(false);
-    const [sendResult, setSendResult] = useState(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generateResult, setGenerateResult] = useState(null);
 
     // 日付でグループ化（同じ日の複数セッションをまとめる）
     const sessionsByDate = useMemo(() => {
@@ -45,48 +44,103 @@ function History({ onBack }) {
         setShowDeleteConfirm(null);
     };
 
-    // Webhook送信（手動）
-    const handleSendToMake = async (sessions, sets) => {
-        const webhookUrl = getWebhookUrl();
-        if (!webhookUrl) {
-            alert('Webhook URLが設定されていません。\n設定画面から外部連携を設定してください。');
-            return;
-        }
-
-        setIsSending(true);
-        setSendResult(null);
+    // AI記事生成
+    const handleGenerateArticle = async (sessions, sets) => {
+        setIsGenerating(true);
+        setGenerateResult(null);
 
         try {
-            // 日付のセッションデータを構築
-            const sessionData = {
-                session: {
-                    id: sessions[0].id,
-                    date: sessions[0].date,
-                    sets: sets,
-                    bodyCondition: Math.round(
-                        sessions.reduce((sum, s) => sum + (s.bodyCondition || 3), 0) / sessions.length
-                    ),
-                    notes: sessions.map(s => s.notes).filter(Boolean).join('\n')
-                },
-                personalBests: personalBests,
-                settings: state.settings
+            // トレーニングデータをJSON形式で構築
+            const avgCondition = Math.round(
+                sessions.reduce((sum, s) => sum + (s.bodyCondition || 3), 0) / sessions.length
+            );
+
+            // 種目ごとにグループ化
+            const exerciseGroups = {};
+            sets.forEach(set => {
+                if (!exerciseGroups[set.exerciseId]) {
+                    exerciseGroups[set.exerciseId] = {
+                        exerciseId: set.exerciseId,
+                        exerciseName: set.exerciseName,
+                        sets: []
+                    };
+                }
+                exerciseGroups[set.exerciseId].sets.push({
+                    weight: set.weight,
+                    reps: set.reps || 1,
+                    rpe: set.rpe,
+                    isSuccess: set.isSuccess,
+                    notes: set.notes || ''
+                });
+            });
+
+            // PB更新チェック
+            const exercisesWithPB = Object.values(exerciseGroups).map(group => {
+                const currentPB = personalBests[group.exerciseId];
+                const successfulSets = group.sets.filter(s => s.isSuccess);
+                const maxSuccessWeight = successfulSets.length > 0
+                    ? Math.max(...successfulSets.map(s => s.weight))
+                    : 0;
+                const isPBUpdate = currentPB && maxSuccessWeight >= currentPB.weight;
+
+                return {
+                    ...group,
+                    pb: currentPB?.weight || null,
+                    pbReps: currentPB?.reps || 1,
+                    isPBUpdate: isPBUpdate,
+                    maxWeight: Math.max(...group.sets.map(s => s.weight)),
+                    successRate: group.sets.length > 0
+                        ? Math.round((successfulSets.length / group.sets.length) * 100)
+                        : 0
+                };
+            });
+
+            // Gemini APIに送るワークアウトデータ
+            const workoutData = {
+                sessionDate: sessions[0].date,
+                bodyCondition: avgCondition,
+                totalSets: sets.length,
+                totalVolume: sets.reduce((sum, s) => sum + (s.weight * (s.reps || 1)), 0),
+                successRate: Math.round((sets.filter(s => s.isSuccess).length / sets.length) * 100),
+                exercises: exercisesWithPB,
+                notes: sessions.map(s => s.notes).filter(Boolean).join('\n')
             };
 
-            const result = await sendWorkoutLogToMake(sessionData);
+            // API呼び出し
+            const response = await fetch('/api/generate-post', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    titleIdea: '',
+                    memo: JSON.stringify(workoutData, null, 2)
+                }),
+            });
 
-            if (result.success) {
-                setSendResult('success');
-                setTimeout(() => setSendResult(null), 3000);
+            const data = await response.json();
+
+            if (data.success) {
+                setGenerateResult({
+                    type: 'success',
+                    ...data
+                });
             } else {
-                setSendResult('error');
-                alert('送信に失敗しました: ' + result.error);
+                setGenerateResult({
+                    type: 'error',
+                    error: data.error,
+                    details: data.details
+                });
             }
         } catch (error) {
-            console.error('Send error:', error);
-            setSendResult('error');
-            alert('送信中にエラーが発生しました');
+            console.error('Generate error:', error);
+            setGenerateResult({
+                type: 'error',
+                error: '記事生成中にエラーが発生しました',
+                details: error.message
+            });
         } finally {
-            setIsSending(false);
+            setIsGenerating(false);
         }
     };
 
@@ -120,7 +174,10 @@ function History({ onBack }) {
         return (
             <>
                 <header className="header">
-                    <button className="header__back" onClick={() => setSelectedDate(null)}>
+                    <button className="header__back" onClick={() => {
+                        setSelectedDate(null);
+                        setGenerateResult(null);
+                    }}>
                         ← 戻る
                     </button>
                     <h1 className="header__title">
@@ -160,17 +217,75 @@ function History({ onBack }) {
                         </div>
                     </div>
 
-                    {/* Make.com送信ボタン */}
+                    {/* AI記事生成ボタン */}
                     <button
-                        className={`btn btn--full ${sendResult === 'success' ? 'btn--success' : 'btn--secondary'}`}
-                        onClick={() => handleSendToMake(sessions, sets)}
-                        disabled={isSending}
+                        className={`btn btn--full ${generateResult?.type === 'success' ? 'btn--success' : 'btn--primary'}`}
+                        onClick={() => handleGenerateArticle(sessions, sets)}
+                        disabled={isGenerating}
                         style={{ marginBottom: 'var(--spacing-lg)' }}
                     >
-                        {isSending ? '⏳ 送信中...' :
-                            sendResult === 'success' ? '✓ 送信完了！' :
-                                '📤 Make.comに送信'}
+                        {isGenerating ? '🤖 AIが記事を執筆中...' :
+                            generateResult?.type === 'success' ? '✅ 記事作成完了！' :
+                                '✨ AI記事を作成'}
                     </button>
+
+                    {/* 生成結果 */}
+                    {generateResult?.type === 'success' && (
+                        <div style={{
+                            padding: 'var(--spacing-md)',
+                            background: 'var(--color-success-bg)',
+                            borderRadius: 'var(--radius-md)',
+                            marginBottom: 'var(--spacing-lg)'
+                        }}>
+                            <div style={{ color: 'var(--color-success)', marginBottom: 'var(--spacing-sm)' }}>
+                                <strong>{generateResult.message}</strong>
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+                                <div>📝 {generateResult.article?.title}</div>
+                                <div>⏱ 処理時間: {generateResult.timing?.total}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                                <a
+                                    href={generateResult.wordpress?.editUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn--secondary"
+                                    style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
+                                >
+                                    📝 編集画面
+                                </a>
+                                <a
+                                    href={generateResult.wordpress?.previewUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn--ghost"
+                                    style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
+                                >
+                                    👁 プレビュー
+                                </a>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 生成エラー */}
+                    {generateResult?.type === 'error' && (
+                        <div style={{
+                            padding: 'var(--spacing-md)',
+                            background: 'var(--color-error-bg)',
+                            borderRadius: 'var(--radius-md)',
+                            marginBottom: 'var(--spacing-lg)',
+                            color: 'var(--color-error)'
+                        }}>
+                            <strong>❌ {generateResult.error}</strong>
+                            {generateResult.details && (
+                                <div style={{ fontSize: 'var(--font-size-xs)', marginTop: 'var(--spacing-xs)', opacity: 0.8 }}>
+                                    {typeof generateResult.details === 'string'
+                                        ? generateResult.details
+                                        : JSON.stringify(generateResult.details)}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {sessions.length > 1 && (
                         <div style={{
