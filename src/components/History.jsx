@@ -96,6 +96,14 @@ function History({ onBack }) {
                 };
             });
 
+            // メモを安全にサニタイズする関数
+            const sanitizeText = (text) => {
+                if (!text) return '';
+                return String(text)
+                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // 制御文字を除去
+                    .trim();
+            };
+
             // Gemini APIに送るワークアウトデータ
             const workoutData = {
                 sessionDate: sessions[0].date,
@@ -103,8 +111,14 @@ function History({ onBack }) {
                 totalSets: sets.length,
                 totalVolume: sets.reduce((sum, s) => sum + (s.weight * (s.reps || 1)), 0),
                 successRate: Math.round((sets.filter(s => s.isSuccess).length / sets.length) * 100),
-                exercises: exercisesWithPB,
-                notes: sessions.map(s => s.notes).filter(Boolean).join('\n')
+                exercises: exercisesWithPB.map(ex => ({
+                    ...ex,
+                    sets: ex.sets.map(s => ({
+                        ...s,
+                        notes: sanitizeText(s.notes)
+                    }))
+                })),
+                notes: sanitizeText(sessions.map(s => s.notes).filter(Boolean).join(' '))
             };
 
             // API呼び出し
