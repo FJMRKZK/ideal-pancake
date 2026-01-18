@@ -117,7 +117,7 @@ function History({ onBack }) {
                     .trim();
             };
 
-            // Gemini APIに送るワークアウトデータ
+            // Gemini APIに送るワークアウトデータ（シンプル化）
             const workoutData = {
                 sessionDate: sessions[0].date,
                 bodyCondition: avgCondition,
@@ -125,9 +125,18 @@ function History({ onBack }) {
                 totalVolume: sets.reduce((sum, s) => sum + (s.weight * (s.reps || 1)), 0),
                 successRate: Math.round((sets.filter(s => s.isSuccess).length / sets.length) * 100),
                 exercises: exercisesWithPB.map(ex => ({
-                    ...ex,
+                    // 必要最小限のフィールドのみ
+                    exerciseName: sanitizeText(ex.exerciseName),
+                    pb: ex.pb,
+                    pbReps: ex.pbReps,
+                    isPBUpdate: ex.isPBUpdate,
+                    maxWeight: ex.maxWeight,
+                    successRate: ex.successRate,
                     sets: ex.sets.map(s => ({
-                        ...s,
+                        weight: s.weight,
+                        reps: s.reps,
+                        rpe: s.rpe,
+                        isSuccess: s.isSuccess,
                         notes: sanitizeText(s.notes)
                     }))
                 })),

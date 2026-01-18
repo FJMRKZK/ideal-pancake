@@ -88,15 +88,27 @@ function WorkoutRecorder({ onEnd, onBack }) {
 
     // 検索結果
     const filteredExercises = useMemo(() => {
+        // デバッグ用
+        console.log('Custom exercises:', state.customExercises);
+        console.log('All exercises count:', allExercises.length);
+
         if (!searchQuery) {
-            return allExercises;
+            // カスタム種目を先頭に配置
+            const custom = allExercises.filter(ex => ex.isCustom);
+            const builtin = allExercises.filter(ex => !ex.isCustom);
+            return [...custom, ...builtin];
         }
         const lowerQuery = searchQuery.toLowerCase();
-        return allExercises.filter(ex =>
+        const results = allExercises.filter(ex =>
             ex.name.toLowerCase().includes(lowerQuery) ||
             ex.id.toLowerCase().includes(lowerQuery)
         );
-    }, [allExercises, searchQuery]);
+        console.log('Search query:', searchQuery, 'Results:', results.length, results);
+        // カスタム種目を優先
+        const custom = results.filter(ex => ex.isCustom);
+        const builtin = results.filter(ex => !ex.isCustom);
+        return [...custom, ...builtin];
+    }, [allExercises, searchQuery, state.customExercises]);
 
     // 現在のPB
     const currentPB = selectedExercise
