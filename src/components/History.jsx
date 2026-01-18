@@ -100,7 +100,20 @@ function History({ onBack }) {
             const sanitizeText = (text) => {
                 if (!text) return '';
                 return String(text)
-                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // 制御文字を除去
+                    // 制御文字を除去
+                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+                    // 特殊な丸・バツ記号を文字に置換
+                    .replace(/○/g, 'まる')
+                    .replace(/◯/g, 'まる')
+                    .replace(/×/g, 'ばつ')
+                    .replace(/✕/g, 'ばつ')
+                    .replace(/✖/g, 'ばつ')
+                    // バックスラッシュを除去
+                    .replace(/\\/g, '')
+                    // ダブルクォートをシングルに
+                    .replace(/"/g, "'")
+                    // 連続するスペースを1つに
+                    .replace(/\s+/g, ' ')
                     .trim();
             };
 
